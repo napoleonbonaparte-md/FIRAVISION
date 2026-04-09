@@ -263,7 +263,7 @@ dmesg | grep -i "ur_thermal\|imx219"
 
 ## License
 
-Copyright © 2024 Covenant. All Rights Reserved.
+Copyright © 2026 Covenant. All Rights Reserved.
 
 This software and all associated source code, documentation, device tree files, and build scripts (collectively, the "Software") are the exclusive proprietary property of Covenant.
 
