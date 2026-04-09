@@ -1,0 +1,318 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    overlay-name = "UR Series Thermal Camera Dual";
+    jetson-header-name = "Jetson 24pin CSI Connector";
+    compatible = "nvidia,p3768-0000+p3767-0005-super", "nvidia,p3767-0005", "nvidia,tegra234";
+
+    /* =========================================================
+     * Fragment 0: VI + CSI + tegra-camera-platform + cam_i2cmux
+     * All in one fragment targeting "/" exactly like the
+     * NVIDIA reference IMX219 dual overlay.
+     * ========================================================= */
+    fragment@0 {
+        target-path = "/";
+        __overlay__ {
+
+            /* --- Video Input --- */
+            tegra-capture-vi {
+                num-channels = <2>;
+                ports {
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+
+                    port@0 {
+                        reg = <0>;
+                        ur_vi_in0: endpoint {
+                            port-index = <1>; /* CSI B - CAM0 */
+                            bus-width = <2>;
+                            remote-endpoint = <&ur_csi_out0>;
+                        };
+                    };
+
+                    port@1 {
+                        reg = <1>;
+                        ur_vi_in1: endpoint {
+                            port-index = <2>; /* CSI C - CAM1 */
+                            bus-width = <2>;
+                            remote-endpoint = <&ur_csi_out1>;
+                        };
+                    };
+                };
+            };
+
+            bus@0 {
+
+                /* --- CSI --- */
+                host1x@13e00000 {
+                    nvcsi@15a00000 {
+                        num-channels = <2>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+                        channel@0 {
+                            reg = <0>;
+                            ports {
+                                #address-cells = <1>;
+                                #size-cells = <0>;
+                                port@0 {
+                                    reg = <0>;
+                                    ur_csi_in0: endpoint@0 {
+                                        port-index = <1>; /* CSI B */
+                                        bus-width = <2>;
+                                        remote-endpoint = <&ur_out0>;
+                                    };
+                                };
+                                port@1 {
+                                    reg = <1>;
+                                    ur_csi_out0: endpoint@1 {
+                                        remote-endpoint = <&ur_vi_in0>;
+                                    };
+                                };
+                            };
+                        };
+
+                        channel@1 {
+                            reg = <1>;
+                            ports {
+                                #address-cells = <1>;
+                                #size-cells = <0>;
+                                port@0 {
+                                    reg = <0>;
+                                    ur_csi_in1: endpoint@2 {
+                                        port-index = <2>; /* CSI C */
+                                        bus-width = <2>;
+                                        remote-endpoint = <&ur_out1>;
+                                    };
+                                };
+                                port@1 {
+                                    reg = <1>;
+                                    ur_csi_out1: endpoint@3 {
+                                        remote-endpoint = <&ur_vi_in1>;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+
+                /*
+                 * cam_i2cmux — GPIO-controlled I2C MUX
+                 *
+                 * This is the key: both camera connectors share
+                 * i2c@3180000 (cam_i2c). The MUX switches between
+                 * CAM0 (i2c@0) and CAM1 (i2c@1) using gpio_aon pin 0x13.
+                 *
+                 * When mux-gpio = 0 → i2c@0 = CAM0
+                 * When mux-gpio = 1 → i2c@1 = CAM1
+                 *
+                 * Both sensors have the same I2C address 0x3c but are
+                 * on separate MUX channels so no collision occurs.
+                 */
+                cam_i2cmux {
+                    status = "okay";
+                    compatible = "i2c-mux-gpio";
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+                    i2c-parent = <&cam_i2c>;
+                    mux-gpios = <&gpio_aon 0x13 0x00>;
+
+                    /* CAM0 channel */
+                    i2c@0 {
+                        status = "okay";
+                        reg = <0>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+                        imx219_a@3c {
+                            compatible = "covenant,imx219-yuv640";
+                            reg = <0x3c>;
+                            status = "okay";
+                            devnode = "video0";
+                            physical_w = "3.680";
+                            physical_h = "2.760";
+                            use_sensor_mode_id = "false";
+                            reset-gpios = <&gpio 0x3e 0x00>;  /* PH.06 - CAM0_PWDN */
+
+                            clocks = <&bpmp 13>, <&bpmp 104>;
+                            clock-names = "extperiph1", "pll_p_out0";
+                            mclk = "extperiph1";
+                            assigned-clocks = <&bpmp 13>;
+                            assigned-clock-rates = <24000000>;
+
+                            vana-supply = <&vdd_1v8_sys>;
+                            vdig-supply = <&vdd_1v8_sys>;
+                            vddl-supply = <&vdd_1v8_sys>;
+
+                            mode0 {
+                                mclk_khz = "24000";
+                                num_lanes = "2";
+                                tegra_sinterface = "serial_b";
+                                phy_mode = "DPHY";
+                                discontinuous_clk = "false";
+                                dpcm_enable = "false";
+                                cil_settletime = "0";
+                                lane_polarity = "6";
+                                active_w = "640";
+                                active_h = "514";
+                                mode_type = "yuv";
+                                pixel_phase = "yuyv";
+                                csi_pixel_bit_depth = "16";
+                                readout_orientation = "0";
+                                line_length = "2200";
+                                inherent_gain = "1";
+                                mclk_multiplier = "2";
+                                pix_clk_hz = "100000000";
+                                gain_factor = "16";
+                                framerate_factor = "1000000";
+                                exposure_factor = "1000000";
+                                min_gain_val = "16";
+                                max_gain_val = "170";
+                                step_gain_val = "1";
+                                default_gain = "16";
+                                min_hdr_ratio = "1";
+                                max_hdr_ratio = "1";
+                                min_framerate = "2000000";
+                                max_framerate = "30000000";
+                                step_framerate = "1000000";
+                                default_framerate = "30000000";
+                                min_exp_time = "13";
+                                max_exp_time = "333333";
+                                step_exp_time = "1";
+                                default_exp_time = "2495";
+                                embedded_metadata_height = "0";
+                            };
+
+                            ports {
+                                #address-cells = <1>;
+                                #size-cells = <0>;
+                                port@0 {
+                                    reg = <0>;
+                                    ur_out0: endpoint {
+                                        port-index = <1>; /* CSI B */
+                                        bus-width = <2>;
+                                        remote-endpoint = <&ur_csi_in0>;
+                                        link-frequencies = /bits/ 64 <400000000>;
+                                    };
+                                };
+                            };
+                        };
+                    };
+
+                    /* CAM1 channel */
+                    i2c@1 {
+                        status = "okay";
+                        reg = <1>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+                        imx219_b@3c {
+                            compatible = "covenant,imx219-yuv640";
+                            reg = <0x3c>;
+                            status = "okay";
+                            devnode = "video1";
+                            physical_w = "3.680";
+                            physical_h = "2.760";
+                            use_sensor_mode_id = "false";
+                            reset-gpios = <&gpio 0xA0 0x00>;  /* PAC.00 - CAM1_PWDN */
+
+                            clocks = <&bpmp 13>, <&bpmp 104>;
+                            clock-names = "extperiph1", "pll_p_out0";
+                            mclk = "extperiph1";
+                            assigned-clocks = <&bpmp 13>;
+                            assigned-clock-rates = <24000000>;
+
+                            vana-supply = <&vdd_1v8_sys>;
+                            vdig-supply = <&vdd_1v8_sys>;
+                            vddl-supply = <&vdd_1v8_sys>;
+
+                            mode0 {
+                                mclk_khz = "24000";
+                                num_lanes = "2";
+                                tegra_sinterface = "serial_c";
+                                phy_mode = "DPHY";
+                                discontinuous_clk = "false";
+                                dpcm_enable = "false";
+                                cil_settletime = "0";
+                                lane_polarity = "6";
+                                active_w = "640";
+                                active_h = "514";
+                                mode_type = "yuv";
+                                pixel_phase = "yuyv";
+                                csi_pixel_bit_depth = "16";
+                                readout_orientation = "0";
+                                line_length = "2200";
+                                inherent_gain = "1";
+                                mclk_multiplier = "2";
+                                pix_clk_hz = "100000000";
+                                gain_factor = "16";
+                                framerate_factor = "1000000";
+                                exposure_factor = "1000000";
+                                min_gain_val = "16";
+                                max_gain_val = "170";
+                                step_gain_val = "1";
+                                default_gain = "16";
+                                min_hdr_ratio = "1";
+                                max_hdr_ratio = "1";
+                                min_framerate = "2000000";
+                                max_framerate = "30000000";
+                                step_framerate = "1000000";
+                                default_framerate = "30000000";
+                                min_exp_time = "13";
+                                max_exp_time = "333333";
+                                step_exp_time = "1";
+                                default_exp_time = "2495";
+                                embedded_metadata_height = "0";
+                            };
+
+                            ports {
+                                #address-cells = <1>;
+                                #size-cells = <0>;
+                                port@0 {
+                                    reg = <0>;
+                                    ur_out1: endpoint {
+                                        port-index = <2>; /* CSI C */
+                                        bus-width = <2>;
+                                        remote-endpoint = <&ur_csi_in1>;
+                                        link-frequencies = /bits/ 64 <400000000>;
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+
+                /* --- tegra-camera-platform --- */
+                tegra-camera-platform {
+                    compatible = "nvidia, tegra-camera-platform";
+                    isp_peak_byte_per_pixel = <0>;
+                    isp_bw_margin_pct = <0>;
+
+                    modules {
+                        module0 {
+                            badge = "ur_cam0";
+                            position = "front";
+                            orientation = "1";
+                            drivernode0 {
+                                pcl_id = "v4l2_sensor";
+                                sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@0/imx219_a@3c";
+                            };
+                        };
+
+                        module1 {
+                            badge = "ur_cam1";
+                            position = "rear";
+                            orientation = "1";
+                            drivernode0 {
+                                pcl_id = "v4l2_sensor";
+                                sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@1/imx219_b@3c";
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+};
+
