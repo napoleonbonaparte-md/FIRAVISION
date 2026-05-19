@@ -175,19 +175,21 @@ static unsigned short do_crc(unsigned char *ptr, int len)
 
 /* --- Packet Templates --- */
 
+/* --- Updated Packet Templates for v07.02 --- */
+
 static const u8 start_regs_template[] = {
     0x01, 0x30, 0xc1, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x0a, 0x00,
-    0x00, 0x00, /* [14,15] CRC 1 */
-    0x2F, 0x0D, /* [16,17] CRC 2 */
-    0x00, /* [18] Path */
-    0x16, /* [19] Src */
-    0x03, /* [20] Dst */
-    0x1e, /* [21] FPS */
-    0x80, 0x02, /* [22,23] Width */
-    0x00, 0x02, /* [24,25] Height */
+    0x00, 0x00, /* [14,15] Inner CRC Placeholders */
+    0x2F, 0x0D, /* [16,17] Outer CRC Placeholders */
+    0x00,       /* [18] Path channel */
+    0x01,       /* [19] FIXED: Updated v07.02 sync control channel byte */
+    0x03,       /* [20] Destination subsystem */
+    0x3c,       /* [21] FPS (30) */
+    0x80, 0x02, /* [22,23] Width (640 -> Little Endian) */
+    0x00, 0x02, /* [24,25] Height (512 -> Little Endian) */
     0x00, 0x00
 };
 
@@ -198,11 +200,12 @@ static const u8 stop_regs_template[] = {
     0x0a, 0x00,
     0x00, 0x00,
     0x2F, 0x0D,
-    0x01, 0x16, 0x00, 0x0e,
+    0x01, 
+    0x01,       /* [19] FIXED: Updated v07.02 sync byte */
+    0x00, 0x0e,
     0x80, 0x02, 0x00, 0x02,
     0x00, 0x00
 };
-
 static int ur_set_stream(struct v4l2_subdev *sd, int enable)
 {
     struct ur_sensor *sensor = to_ur_sensor(sd);
@@ -224,7 +227,7 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
             goto unlock;
         }
 
-        buf[19] = type;
+ //       buf[19] = type;
         buf[21] = UR_FPS;
         buf[22] = UR_WIDTH & 0xff;
         buf[23] = UR_WIDTH >> 8;
@@ -235,7 +238,7 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
         buf[14] = crc & 0xff;
         buf[15] = crc >> 8;
 
-        crc = do_crc((uint8_t *)(buf), 16);
+        crc = do_crc((uint8_t *)(buf), 14);
         buf[16] = crc & 0xff;
         buf[17] = crc >> 8;
 
@@ -245,7 +248,7 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
 
         if (ret)
             goto unlock;
-        msleep(50);
+        msleep(200);
 
     } else {
         buf = kmemdup(stop_regs_template, sizeof(stop_regs_template), GFP_KERNEL);
@@ -254,13 +257,13 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
             goto unlock;
         }
 
-        buf[19] = type;
+   //     buf[19] = type;
 
         crc = do_crc((uint8_t *)(buf + 18), 10);
         buf[14] = crc & 0xff;
         buf[15] = crc >> 8;
 
-        crc = do_crc((uint8_t *)(buf), 16);
+        crc = do_crc((uint8_t *)(buf), 14);
         buf[16] = crc & 0xff;
         buf[17] = crc >> 8;
 
