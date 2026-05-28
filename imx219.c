@@ -206,8 +206,14 @@ static const u8 stop_regs_template[] = {
     0x80, 0x02, 0x00, 0x02,
     0x00, 0x00
 };
+//Note: This register is mainly added to address the color inversion issue that occurs during YUV display. For example: it is originally YUYV, but UYVY is displayed.
+static const u8 ctrl_seq[] = { 
+	0x01, 0x0e, 0xc1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+	0xd4, 0x00, 0x40, 0x01, 0x00, 0x88, 0x91, 0xa4, 0xff, 0x80
+};
 static int ur_set_stream(struct v4l2_subdev *sd, int enable)
 {
+    
     struct ur_sensor *sensor = to_ur_sensor(sd);
     struct i2c_client *client = sensor->client;
     u8 *buf;
@@ -243,7 +249,7 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
         buf[17] = crc >> 8;
 
         dev_info(&client->dev, "Sending Start Stream (Type: %d)\n", type);
-        ret = ur_write_buffer(client, UR_REG_BUFFER_RW, buf, sizeof(start_regs_template));
+        //ret = ur_write_buffer(client, UR_REG_BUFFER_RW, buf, sizeof(start_regs_template));
         kfree(buf);
 
         if (ret)
@@ -268,7 +274,7 @@ static int ur_set_stream(struct v4l2_subdev *sd, int enable)
         buf[17] = crc >> 8;
 
         dev_info(&client->dev, "Sending Stop Stream\n");
-        ret = ur_write_buffer(client, UR_REG_BUFFER_RW, buf, sizeof(stop_regs_template));
+        //ret = ur_write_buffer(client, UR_REG_BUFFER_RW, buf, sizeof(stop_regs_template));
         kfree(buf);
     }
 
@@ -678,6 +684,7 @@ static int ur_probe(struct i2c_client *client, const struct i2c_device_id *id)
         dev_err(&client->dev, "Async register failed: %d\n", ret);
         goto error_entity;
     }
+    ret = ur_write_buffer(client, UR_REG_BUFFER_RW, ctrl_seq, sizeof(ctrl_seq));
 
     dev_info(&client->dev, "PROBE COMPLETE: Success (sinterface=%u)\n",
              sensor->tegra_sinterface);
